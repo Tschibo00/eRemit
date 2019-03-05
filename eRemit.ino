@@ -74,7 +74,20 @@ void transformPicture(){
     }
 }
 
-void drawDigit(uint8_t *font, uint8_t pos, uint8_t width, uint8_t number, CRGB color){
+void drawLogo(const uint16_t *logo, CRGB color){
+  uint16_t c;
+  for (uint8_t y=0;y<7;y++){
+    c=logo[y];
+    for (uint8_t x=0;x<11;x++){
+      if (c&0x8000)
+        screen[y*11+x]=color;
+      else
+        screen[y*11+x]=CRGB::Black;
+    }
+  }
+}
+
+void drawDigit(const uint8_t *font, uint8_t pos, uint8_t width, uint8_t number, CRGB color){
   uint8_t c;
   for (uint8_t y=0;y<7;y++){
     c=font[7*number];
@@ -87,24 +100,40 @@ void drawDigit(uint8_t *font, uint8_t pos, uint8_t width, uint8_t number, CRGB c
   }
 }
 
-void drawTime(int number, CRGB color){
+void drawNumber(int number, CRGB color){
   uint8_t digits;
   uint8_t d0, d1, d2;
 
   if (number<0) number=0;
-  if (number>599) number=599;
+  if (number>999) number=999;
   digits=3;
-  d0=number/60;
-  d1=(number%60)/10;
-  d2=number%10;
+  d0=number/100;
+  d1=(number%100)/10;
+  d2=number%100;
   if (d0==0) digits=2;
 
   //clear screen
   for (int i=0;i<77;i++)
     screen[i]=CRGB::Black;
 
-  drawDigit(font57, 0, 5, d1, color);
-  drawDigit(font57, 6, 5, d2, color);
+  if (digits==2){
+    drawDigit(font57, 0, 5, d1, color);
+    drawDigit(font57, 6, 5, d2, color);
+  }else{
+    drawDigit(font37, 0, 3, d0, color);
+    drawDigit(font37, 4, 3, d1, color);
+    drawDigit(font37, 8, 3, d2, color);
+  }
+}
+
+void drawTime(int minutes, CRGB color){
+  int d0, d1;
+
+  if (minutes<0) minutes=0;
+  if (minutes>599) minutes=599;
+  d0=minutes/60;
+  d1=minutes%60;
+  drawNumber(d0*100+d1, color);
 }
 
 void loop() {
@@ -114,7 +143,13 @@ void loop() {
 //  drawSingle();
   int m=millis()%512;
   m=enc->val;
-  drawTime(m, CRGB::Red);
+  switch(m){
+    case 0: drawTime((millis()/1000)%600, CRGB::White); break;
+    case 1: drawLogo(logos, CRGB::Green); break;
+    case 2: drawLogo(logos+7, CRGB::Green); break;
+    case 3: drawLogo(logos+14, CRGB::Green); break;
+    default:  drawNumber(m, CRGB::Magenta);
+  }
   transformPicture();
   FastLED.show();  
 }
