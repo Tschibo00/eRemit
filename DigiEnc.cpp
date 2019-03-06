@@ -1,6 +1,6 @@
 #include "DigiEnc.h"
 
-void DigiEnc::process() {
+bool DigiEnc::process() {
   bool _a=digitalRead(_pinA);
   bool _b=digitalRead(_pinB);
   // clockwise
@@ -43,5 +43,7 @@ void DigiEnc::process() {
     }
     _valQuad=0;
     _lastUpdate=millis();
+    return true;
   }
+  return false;
 }

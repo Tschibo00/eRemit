@@ -32,7 +32,7 @@ class DigiEnc {
       pinMode(_pinB, INPUT_PULLUP);
     }
 
-    void process();     // should be called at least 250 times/second to ensure a errorfree processing even for fast turning
+    bool process();     // should be called at least 250 times/second to ensure a errorfree processing even for fast turning. returns true if anything changed, false otherwise
 
 };
 
