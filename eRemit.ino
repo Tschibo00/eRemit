@@ -27,14 +27,14 @@ uint8_t brightness=127;
 uint8_t flashspeed=0;
 volatile bool playing=false;
 bool buttonPressLocked=false;
-volatile uint32_t secLeft=0;        // this is the timer's time
+volatile uint32_t secLeft=600;        // this is the timer's time
 volatile bool timerPaused=false;    // true=>pause, false=running
-uint8_t state=0;
 #define STATE_TIME  0
 #define STATE_MENU  2
 #define STATE_MENU_ALARM_SET  6
 #define STATE_MENU_LIGHT_SET  7
 #define STATE_MENU_COLOR_SET  8
+volatile uint8_t state=STATE_TIME;
 
 void setup() {
   cli();//disable interrupts
@@ -71,7 +71,7 @@ void setup() {
   TCCR4C|=0x09; // Activate channel
 
   // setup display
-  FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(UncorrectedColor); //TypicalLEDStrip
+  FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(UncorrectedColor); //TypicalLEDStrip 
   FastLED.setBrightness(brightness);
 
   // setup data enc button  
@@ -83,6 +83,8 @@ void setup() {
   encAlarm=new DigiEnc(9,4,0,3,true,false);
   encLight=new DigiEnc(9,4,1,255,false,true);
   encColor=new DigiEnc(9,4,0,7,false,true);
+
+  Serial.begin(115200);
 }
 
 ISR(TIMER1_COMPA_vect){//timer 1 interrupt
@@ -128,7 +130,7 @@ void setBrightness(){
   if (flashspeed==0){
     FastLED.setBrightness(brightness);
   }else{
-    FastLED.setBrightness(((uint8_t)(sin(0.001f*millis()*flashspeed)*127.0+127.0)));
+    FastLED.setBrightness(((uint8_t)((sin(0.001f*millis()*flashspeed)+1.0)/2.0*((float)brightness))));
   }
 }
 
@@ -149,7 +151,7 @@ void drawLogo(const uint16_t *logo, CRGB color){
 void drawDigit(const uint8_t *font, uint8_t pos, uint8_t width, uint8_t number, CRGB color){
   uint8_t c;
   for (uint8_t y=0;y<7;y++){
-    c=font[7*number];
+    c=font[7*number+y];
     for (uint8_t x=0;x<width;x++){
       if (c&128)
         screen[y*11+x+pos]=color;
@@ -169,7 +171,7 @@ void drawNumber(int number, CRGB color){
   digits=3;
   d0=number/100;
   d1=(number%100)/10;
-  d2=number%100;
+  d2=number%10;
   if (d0==0) digits=2;
 
   //clear screen
@@ -177,12 +179,15 @@ void drawNumber(int number, CRGB color){
     screen[i]=CRGB::Black;
 
   if (digits==2){
-    drawDigit(font57, 0, 5, d1, color);
+    if (d1>0)
+      drawDigit(font57, 0, 5, d1, color);
     drawDigit(font57, 6, 5, d2, color);
   }else{
     drawDigit(font37, 0, 3, d0, color);
     drawDigit(font37, 4, 3, d1, color);
     drawDigit(font37, 8, 3, d2, color);
+    screen[25]=CRGB(color.g/4,color.g/4,color.g/4);
+    screen[47]=CRGB(color.g/4,color.g/4,color.g/4);
   }
 }
 
@@ -200,15 +205,15 @@ void drawTime(){
   CRGB c;
   if (timerPaused){
     flashspeed=3;
-    c=CRGB::White;
+    c=CRGB(255,255,255);
   }else{
     flashspeed=0;
     if (secLeft>315)
-      c=CRGB::Green;
+      c=CRGB(0,255,0);
     else {
       if (secLeft<60){
         flashspeed=10;
-        c=CRGB::Red;
+        c=CRGB(255,0,0);
       }else
         c=CRGB(315-secLeft,secLeft-60,0);
     }
@@ -216,12 +221,29 @@ void drawTime(){
   if (secLeft<60){
     drawTime(secLeft,c);
   }else{
-    drawTime((secLeft/60)+1,c);
+    drawTime(secLeft/60,c);
   }
 }
 
 // **************** MAIN CONTROL LOOP ****************
 void loop() {
+
+state=STATE_TIME;
+
+
+
+  drawLogo(logos+14,CRGB::Blue);
+  transformPicture();
+  setBrightness();
+  FastLED.show();
+  return;
+
+
+
+  Serial.print("state ");
+  Serial.print(state);
+
+  
   switch(state){
     case STATE_MENU:
       encMenu->process();
@@ -252,10 +274,6 @@ void loop() {
           for (i=1;i<bat2/21;i++) screen[55+i]=CRGB::Green;
           break;
       }
-      if (getButtonClick()){
-        state=STATE_MENU_ALARM_SET;
-      }
-      drawLogo(logos+7, CRGB::White);
       break;
       
     case STATE_MENU_ALARM_SET:
@@ -263,6 +281,7 @@ void loop() {
     case STATE_MENU_LIGHT_SET:
       encLight->process();
       brightness=encLight->val;
+      drawLogo(logos+14, CRGB::White);
       break;
     case STATE_MENU_COLOR_SET:
 //      drawLogo(logos, CRGB::White);
@@ -271,7 +290,7 @@ void loop() {
     default:
       encTimer->val=secLeft/60;
       if (encTimer->process()){    // change the current set time when encoder is used
-        secLeft=encTimer->val;
+        secLeft=encTimer->val*60;
       }
       if (getButtonClick()){       // pause/unpause with button
         if (secLeft==0)
@@ -279,11 +298,28 @@ void loop() {
         else
           timerPaused=!timerPaused;
       }
+
+Serial.print(" time ");
+Serial.print(secLeft);
+
+      
       drawTime();
-      break;
+
+
+  Serial.print(" draw ");
+  Serial.println();
+      
   }
+
+
 
   transformPicture();
   setBrightness();
   FastLED.show();  
+
+
+
+Serial.println("*********************");
+
+  
 }

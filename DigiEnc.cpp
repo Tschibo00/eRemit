@@ -1,6 +1,7 @@
 #include "DigiEnc.h"
 
 bool DigiEnc::process() {
+  bool retVal=false;
   bool _a=digitalRead(_pinA);
   bool _b=digitalRead(_pinB);
   // clockwise
@@ -25,10 +26,14 @@ bool DigiEnc::process() {
       _stepSize=1;
     else
       _stepSize=23-_deltaLastUpdate;
-    if (_valQuad<0)
+    if (_valQuad<0){
       val-=_stepSize;
-    if (_valQuad>0)
+      retVal=true;
+    }
+    if (_valQuad>0){
       val+=_stepSize;
+      retVal=true;
+    }
     if (val>_max){
       if (_wrapping)
         val=_min;
@@ -43,7 +48,6 @@ bool DigiEnc::process() {
     }
     _valQuad=0;
     _lastUpdate=millis();
-    return true;
   }
-  return false;
+  return retVal;
 }
