@@ -23,20 +23,28 @@
 CRGB leds[NUM_LEDS];
 CRGB screen[NUM_LEDS];
 DigiEnc *encTimer,*encMenu,*encAlarm,*encLight,*encColor;
-uint8_t brightness=127;
-uint8_t flashspeed=0;
-volatile bool playing=false;
-bool buttonPressLocked=false;
-volatile uint32_t secLeft=600;        // this is the timer's time
-volatile bool timerPaused=false;    // true=>pause, false=running
+uint8_t brightness;
+uint8_t flashspeed;
+volatile bool playing;
+bool buttonPressLocked;
+uint32_t secLeft;        // this is the timer's time
+bool timerPaused;    // true=>pause, false=running
 #define STATE_TIME  0
 #define STATE_MENU  2
 #define STATE_MENU_ALARM_SET  6
 #define STATE_MENU_LIGHT_SET  7
 #define STATE_MENU_COLOR_SET  8
-volatile uint8_t state=STATE_TIME;
+uint8_t displayState;
 
 void setup() {
+  brightness=127;
+  flashspeed=0;
+  playing=false;
+  buttonPressLocked=false;
+  secLeft=600;
+  timerPaused=false;
+  displayState=STATE_TIME;
+
   cli();//disable interrupts
 
   //set timer1 interrupt at 8064hz
@@ -76,6 +84,8 @@ void setup() {
 
   // setup data enc button  
   pinMode(2, INPUT_PULLUP);
+  pinMode(A0, INPUT);
+  pinMode(A1, INPUT);
 
   // setup the encoder in multiple instances
   encTimer=new DigiEnc(9,4,0,599,false,true);
@@ -119,15 +129,17 @@ bool getButtonClick(){
 
 /* ****************** Display stuff ******************** */
 void transformPicture(){
-  for (uint8_t y=0;y<7;y+=2)
+  for (uint8_t y=0;y<6;y+=2)
     for (uint8_t x=0;x<11;x++){
       leds[y*11+x]=screen[y*11+x];
       leds[y*11+11+x]=screen[y*11+21-x];
     }
+  for (uint8_t x=0;x<11;x++)
+    leds[66+x]=screen[66+x];
 }
 
 void setBrightness(){
-  if (flashspeed==0){
+  if ((flashspeed==0)||(displayState!=STATE_TIME)){
     FastLED.setBrightness(brightness);
   }else{
     FastLED.setBrightness(((uint8_t)((sin(0.001f*millis()*flashspeed)+1.0)/2.0*((float)brightness))));
@@ -227,38 +239,21 @@ void drawTime(){
 
 // **************** MAIN CONTROL LOOP ****************
 void loop() {
-
-state=STATE_TIME;
-
-
-
-  drawLogo(logos+14,CRGB::Blue);
-  transformPicture();
-  setBrightness();
-  FastLED.show();
-  return;
-
-
-
-  Serial.print("state ");
-  Serial.print(state);
-
-  
-  switch(state){
+  switch(displayState){
     case STATE_MENU:
       encMenu->process();
       switch(encMenu->val){
         case 0:
           drawLogo(logos+7, CRGB::White);
-          if (getButtonClick()) state=STATE_MENU_ALARM_SET;
+          if (getButtonClick()) displayState=STATE_MENU_ALARM_SET;
           break;
         case 1:
           drawLogo(logos+14, CRGB::White);
-          if (getButtonClick()) state=STATE_MENU_LIGHT_SET;
+          if (getButtonClick()) displayState=STATE_MENU_LIGHT_SET;
           break;
         case 2:
           drawLogo(logos, CRGB::White);
-          if (getButtonClick()) state=STATE_MENU_COLOR_SET;
+          if (getButtonClick()) displayState=STATE_MENU_COLOR_SET;
           break;
         case 3:
           // draw battery status
@@ -269,22 +264,31 @@ state=STATE_TIME;
           if (bat1<675) bat1=0; else {if (bat1>859) bat1=184; else bat1-=675;}
           if (bat2<675) bat2=0; else {if (bat2>859) bat2=184; else bat2-=675;}
           bat2=bat2*2-bat1;     // bat1 0..184 equals 3,3v..4,2v of battery 1, bat2 similar for battery 2
+          if (bat2>184) bat2=184;
           uint16_t i;
-          for (i=1;i<bat1/21;i++) screen[11+i]=CRGB::Green;
-          for (i=1;i<bat2/21;i++) screen[55+i]=CRGB::Green;
+          for (i=1;i<(bat1/21);i++) screen[11+i]=CRGB::Green;
+          for (i=1;i<(bat2/21);i++) screen[55+i]=CRGB::Green;
+          if (getButtonClick())
+            displayState=STATE_TIME;
           break;
       }
       break;
       
     case STATE_MENU_ALARM_SET:
+      if (getButtonClick())
+        displayState=STATE_TIME;
       break;
     case STATE_MENU_LIGHT_SET:
       encLight->process();
       brightness=encLight->val;
       drawLogo(logos+14, CRGB::White);
+      if (getButtonClick())
+        displayState=STATE_TIME;
       break;
     case STATE_MENU_COLOR_SET:
 //      drawLogo(logos, CRGB::White);
+      if (getButtonClick())
+        displayState=STATE_TIME;
       break;
       
     default:
@@ -294,32 +298,14 @@ state=STATE_TIME;
       }
       if (getButtonClick()){       // pause/unpause with button
         if (secLeft==0)
-          state=STATE_MENU;
+          displayState=STATE_MENU;
         else
           timerPaused=!timerPaused;
       }
-
-Serial.print(" time ");
-Serial.print(secLeft);
-
-      
       drawTime();
-
-
-  Serial.print(" draw ");
-  Serial.println();
-      
   }
-
-
 
   transformPicture();
   setBrightness();
   FastLED.show();  
-
-
-
-Serial.println("*********************");
-
-  
 }

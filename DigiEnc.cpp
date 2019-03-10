@@ -14,18 +14,18 @@ bool DigiEnc::process() {
   if (!_lastA&&_lastB&&!_a&&!_b)  _valQuad--;
   if (!_lastA&&!_lastB&&_a&&!_b)  _valQuad--;
   if (_lastA&&!_lastB&&_a&&_b)  _valQuad--;
-  
+
   _lastA=_a;
   _lastB=_b;
 
-  if (_a&&_b) {
+  if ((_a&&_b)||((!_a)&&(!_b))) {
     int32_t _stepSize;
     if (_valQuad!=0)
       _deltaLastUpdate=millis()-_lastUpdate;
-    if ((_deltaLastUpdate>=23)||(!_dynamic))
+    if ((_deltaLastUpdate>=8)||(!_dynamic))
       _stepSize=1;
     else
-      _stepSize=23-_deltaLastUpdate;
+      _stepSize=8-_deltaLastUpdate;
     if (_valQuad<0){
       val-=_stepSize;
       retVal=true;
