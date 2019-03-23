@@ -35,16 +35,16 @@ bool timerPaused;    // true=>pause, false=running
 #define STATE_MENU_LIGHT_SET  7
 #define STATE_MENU_COLOR_SET  8
 uint8_t displayState;
-uint8_t toneVal;
-uint32_t toneDelay;
-uint32_t beepDelay;
+uint8_t toneVal=0;
+uint32_t toneDelay=0;
+uint32_t beepDelay=3000;
 
 void setup() {
   brightness=80;
   flashspeed=0;
   playing=false;
   buttonPressLocked=false;
-  secLeft=5;
+  secLeft=0;
   timerPaused=false;
   displayState=STATE_TIME;
 
