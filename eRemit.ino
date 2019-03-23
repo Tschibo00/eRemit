@@ -35,13 +35,16 @@ bool timerPaused;    // true=>pause, false=running
 #define STATE_MENU_LIGHT_SET  7
 #define STATE_MENU_COLOR_SET  8
 uint8_t displayState;
+uint8_t toneVal;
+uint32_t toneDelay;
+uint32_t beepDelay;
 
 void setup() {
-  brightness=127;
+  brightness=80;
   flashspeed=0;
   playing=false;
   buttonPressLocked=false;
-  secLeft=600;
+  secLeft=5;
   timerPaused=false;
   displayState=STATE_TIME;
 
@@ -88,27 +91,49 @@ void setup() {
   pinMode(A1, INPUT);
 
   // setup the encoder in multiple instances
-  encTimer=new DigiEnc(9,4,0,599,false,true);
+  encTimer=new DigiEnc(9,4,-1,599,false,true);
   encMenu=new DigiEnc(9,4,0,3,true,false);
-  encAlarm=new DigiEnc(9,4,0,3,true,false);
+  encAlarm=new DigiEnc(9,4,0,15,false,false);
   encLight=new DigiEnc(9,4,1,255,false,true);
   encColor=new DigiEnc(9,4,0,7,false,true);
+  encLight->val=brightness;
 
   Serial.begin(115200);
 }
 
-ISR(TIMER1_COMPA_vect){//timer 1 interrupt
-  if (!playing){
+ISR(TIMER1_COMPA_vect){//timer 1 interrupt playing samples (8064/sec)
+/*  if (!playing){
     OCR4D=0;  // Set PWM value on D6
   }else{
     OCR4D=0;  // Set PWM value on D6
+  }*/
+
+
+  // beeper stuff
+  playing=false;
+  if (toneDelay&512){
+    if ((toneDelay&4095)>1024){
+      toneVal+=64;
+      playing=true;
+    }
   }
+  if (toneDelay>0)
+    toneDelay--;
+
+  if (playing)
+    OCR4D=toneVal;
+  else
+    OCR4D=0;
 }
 
-ISR(TIMER3_COMPA_vect){ // Timer3 interrupt
-  if (!timerPaused)
+ISR(TIMER3_COMPA_vect){ // Timer3 interrupt running the time (1/sec)
+  if (!timerPaused){
+    if (secLeft==1){
+      toneDelay=beepDelay;
+    }
     if (secLeft>0)
       secLeft--;
+  }
 }
 
 // only returns true once as long as the button is pressed
@@ -275,6 +300,10 @@ void loop() {
       break;
       
     case STATE_MENU_ALARM_SET:
+      if (encAlarm->process()){
+        beepDelay=encAlarm->val*1000;
+        toneDelay=beepDelay;          // play the beep
+      }
       if (getButtonClick())
         displayState=STATE_TIME;
       break;
@@ -293,8 +322,12 @@ void loop() {
       
     default:
       encTimer->val=secLeft/60;
+      if ((secLeft/30)==1) encTimer->val=0;
+      if ((secLeft/30)==0) encTimer->val=-1;
       if (encTimer->process()){    // change the current set time when encoder is used
         secLeft=encTimer->val*60;
+        if (encTimer->val==0) secLeft=30;
+        if (encTimer->val==-1) secLeft=0;
       }
       if (getButtonClick()){       // pause/unpause with button
         if (secLeft==0)
@@ -307,5 +340,6 @@ void loop() {
 
   transformPicture();
   setBrightness();
-  FastLED.show();  
+  if (!playing)       // only update display if no tone is playing to not break the interrupt
+    FastLED.show();  
 }
