@@ -287,6 +287,20 @@ void drawTime(){
   }
 }
 
+// valid range for the type of battery should be about 3,4-4,2v (=694-858 for A1)
+// A0 is total voltage divided by a voltage divider by 2
+uint8_t getBatteryPercentage(uint8_t whichBattery, int valueA0, int valueA1){
+  int i=0;
+  if (whichBattery==0){
+    i=((valueA0*2-valueA1)-694)*100/(858-694);
+  }else{
+    i=(valueA1-694)*100/(858-694);
+  }
+  if (i<0) i=0;
+  if (i>100) i=100;
+  return i;
+}
+
 // **************** MAIN CONTROL LOOP ****************
 void loop() {
   switch(displayState){
@@ -311,13 +325,9 @@ void loop() {
           uint16_t bat1,bat2;
           bat1=analogRead(A0);
           bat2=analogRead(A1);
-          if (bat1<675) bat1=0; else {if (bat1>859) bat1=184; else bat1-=675;}
-          if (bat2<675) bat2=0; else {if (bat2>859) bat2=184; else bat2-=675;}
-          bat2=bat2*2-bat1;     // bat1 0..184 equals 3,3v..4,2v of battery 1, bat2 similar for battery 2
-          if (bat2>184) bat2=184;
           uint16_t i;
-          for (i=1;i<(bat1/21);i++) screen[11+i]=CRGB::Green;
-          for (i=1;i<(bat2/21);i++) screen[55+i]=CRGB::Green;
+          for (i=1;i<getBatteryPercentage(0,bat1,bat2)/11;i++) screen[11+i]=CRGB::Green;
+          for (i=1;i<getBatteryPercentage(1,bat1,bat2)/11;i++) screen[55+i]=CRGB::Green;
           if (getButtonClick())
             displayState=STATE_TIME;
           break;
