@@ -23,7 +23,7 @@
 
 CRGB leds[NUM_LEDS];
 CRGB screen[NUM_LEDS];
-DigiEnc *encTimer,*encMenu,*encAlarm,*encLight,*encColor;
+DigiEnc *encTimer,*encMenu,*encAlarm,*encLight;
 uint8_t brightness;
 uint8_t flashspeed;
 volatile bool playing;
@@ -42,6 +42,10 @@ uint32_t beepDelay=4096;
 unsigned int samplePos=100000;      // set to some out-of-bound value
 bool playSample=false;
 uint32_t beepDelays[]={0,2048,3084,4096,8192,12200,16384};
+bool alarmRunning=false;
+bool batteryEmpty=false;
+bool showBatteryIcon=false;
+uint8_t batteryBeeper=0;
 
 void setup() {
   brightness=80;
@@ -95,11 +99,10 @@ void setup() {
   pinMode(A1, INPUT);
 
   // setup the encoder in multiple instances
-  encTimer=new DigiEnc(9,4,-1,599,false,true);
-  encMenu=new DigiEnc(9,4,0,3,true,false);
-  encAlarm=new DigiEnc(9,4,0,6,false,false);
-  encLight=new DigiEnc(9,4,1,255,false,true);
-  encColor=new DigiEnc(9,4,0,7,false,true);
+  encTimer=new DigiEnc(9,4,-1,599,false,true);    // encoder class to set the time
+  encMenu=new DigiEnc(9,4,0,2,true,false);        // encoder class for navigating the menu
+  encAlarm=new DigiEnc(9,4,0,6,false,false);      // encoder class for setting the alarm tone
+  encLight=new DigiEnc(9,4,1,255,false,true);     // encoder class for setting the brightness
   encLight->val=brightness;
   encAlarm->val=3;
 
@@ -107,9 +110,9 @@ void setup() {
 }
 
 ISR(TIMER1_COMPA_vect){//timer 1 interrupt playing samples (8064/sec)
-  if (playSample){
+  if (playSample&&!showBatteryIcon){          // in case of beep alarm or battery alarm jump to the beeper block
     if (samplePos<gongWavLen){
-      if (samplePos>20)                         // block the display only after the first 20 samples, so it gets refreshed with the 0:00 display while the sample is playing
+      if (samplePos>20)                         // block the display only AFTER the first 20 samples, so it gets refreshed with the 0:00 display while the sample is playing
         playing=true;
       else
         playing=false;
@@ -118,6 +121,7 @@ ISR(TIMER1_COMPA_vect){//timer 1 interrupt playing samples (8064/sec)
     }else{
       OCR4D=0;    
       playing=false;
+      alarmRunning=false;
     }
   }else{
     // beeper stuff
@@ -130,6 +134,8 @@ ISR(TIMER1_COMPA_vect){//timer 1 interrupt playing samples (8064/sec)
     }
     if (toneDelay>0)
       toneDelay--;
+    else
+      alarmRunning=false;
   
     if (playing)
       OCR4D=toneVal;
@@ -143,9 +149,34 @@ ISR(TIMER3_COMPA_vect){ // Timer3 interrupt running the time (1/sec)
     if (secLeft==1){
       toneDelay=beepDelay;
       samplePos=0;
+      alarmRunning=true;
     }
     if (secLeft>0)
       secLeft--;
+  }
+
+  // check for low battery
+  uint16_t bat1,bat2;
+  bat1=analogRead(A0);
+  bat2=analogRead(A1);
+  // only show battery empty when either battery is at 0% and both values are above a low limit
+  // if either bat1 or bat2 is <=450 no battery is in, but we're running off USB power, because
+  // 450 would equal to 2,2V which is completely off the charts for any standard 18650 battery
+  if ((getBatteryPercentage(0,bat1,bat2)==0||getBatteryPercentage(1,bat1,bat2)==0)&&bat1>450&&bat2>450)
+    batteryEmpty=true;
+  else
+    batteryEmpty=false;
+
+
+  if (batteryEmpty&&displayState==STATE_TIME&&!alarmRunning){   // only give battery alarm, if no timer alarm is playing
+    batteryBeeper++;
+    if (batteryBeeper%4==0){
+      toneDelay=1600;
+      showBatteryIcon=true;
+    }else
+      showBatteryIcon=false;
+  } else{
+    showBatteryIcon=false;
   }
 }
 
@@ -308,18 +339,6 @@ void loop() {
       encMenu->process();
       switch(encMenu->val){
         case 0:
-          drawLogo(logos+7, CRGB::White);
-          if (getButtonClick()) displayState=STATE_MENU_ALARM_SET;
-          break;
-        case 1:
-          drawLogo(logos+14, CRGB::White);
-          if (getButtonClick()) displayState=STATE_MENU_LIGHT_SET;
-          break;
-        case 2:
-          drawLogo(logos, CRGB::White);
-          if (getButtonClick()) displayState=STATE_MENU_COLOR_SET;
-          break;
-        case 3:
           // draw battery status
           drawLogo(logos+21, CRGB::White);
           uint16_t bat1,bat2;
@@ -330,6 +349,14 @@ void loop() {
           for (i=1;i<getBatteryPercentage(1,bat1,bat2)/11;i++) screen[55+i]=CRGB::Green;
           if (getButtonClick())
             displayState=STATE_TIME;
+          break;
+        case 1:
+          drawLogo(logos+7, CRGB::White);
+          if (getButtonClick()) displayState=STATE_MENU_ALARM_SET;
+          break;
+        case 2:
+          drawLogo(logos+14, CRGB::White);
+          if (getButtonClick()) displayState=STATE_MENU_LIGHT_SET;
           break;
       }
       break;
@@ -379,6 +406,13 @@ void loop() {
           timerPaused=!timerPaused;
       }
       drawTime();
+  }
+
+  if (showBatteryIcon) {
+    drawLogo(logos, CRGB(255,100,0));
+    for (uint8_t i=8;i<=68;i+=10)
+      screen[i]=CRGB::Red;    // draw strikethrough red
+    flashspeed=0;
   }
 
   transformPicture();
