@@ -46,6 +46,7 @@ bool alarmRunning=false;
 bool batteryEmpty=false;
 bool showBatteryIcon=false;
 uint8_t batteryBeeper=0;
+uint8_t brightTable[]={1,5,12,25,50,80,140,255};
 
 void setup() {
   brightness=80;
@@ -102,8 +103,8 @@ void setup() {
   encTimer=new DigiEnc(9,4,-1,599,false,true);    // encoder class to set the time
   encMenu=new DigiEnc(9,4,0,2,true,false);        // encoder class for navigating the menu
   encAlarm=new DigiEnc(9,4,0,6,false,false);      // encoder class for setting the alarm tone
-  encLight=new DigiEnc(9,4,1,255,false,true);     // encoder class for setting the brightness
-  encLight->val=brightness;
+  encLight=new DigiEnc(9,4,0,7,false,false);       // encoder class for setting the brightness
+  encLight->val=5;
   encAlarm->val=3;
 
   Serial.begin(115200);
@@ -379,13 +380,8 @@ void loop() {
       break;
     case STATE_MENU_LIGHT_SET:
       encLight->process();
-      brightness=encLight->val;
-      drawNumber(brightness,CRGB::White, false);
-      if (getButtonClick())
-        displayState=STATE_TIME;
-      break;
-    case STATE_MENU_COLOR_SET:
-//      drawLogo(logos, CRGB::White);
+      brightness=brightTable[encLight->val];
+      drawNumber(encLight->val,CRGB::White, false);
       if (getButtonClick())
         displayState=STATE_TIME;
       break;
@@ -397,7 +393,12 @@ void loop() {
       if (encTimer->process()){    // change the current set time when encoder is used
         secLeft=encTimer->val*60;
         if (encTimer->val==0) secLeft=30;
-        if (encTimer->val==-1) secLeft=0;
+        if (encTimer->val==-1) {
+          secLeft=0;
+          toneDelay=beepDelay;
+          samplePos=0;
+          alarmRunning=true;
+        }
       }
       if (getButtonClick()){       // pause/unpause with button
         if (secLeft==0)
